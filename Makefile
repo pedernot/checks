@@ -1,5 +1,5 @@
 lint:
-	pylint checks.py || true
+	pylint checks.py --rcfile=setup.cfg || true
 
 typecheck:
 	mypy checks.py

@@ -47,9 +47,7 @@ class Pylint(Task):
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
-            exe.unstash(SOURCE)
             output = exe.sh("make lint").decode().split("\n")
-            print(output)
             annotate(CTX, "pylint", parse_pylint(output))
 
 
@@ -58,6 +56,5 @@ class Mypy(Task):
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
-            exe.unstash(SOURCE)
             output = exe.sh("make typecheck").decode().split("\n")
             annotate(CTX, "mypy", parse_mypy(output))
