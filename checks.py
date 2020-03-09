@@ -18,7 +18,6 @@ class GitContext:
     repo: str
     sha: str
     token: str
-    check: str
 
 
 class AnnotationLevel(Enum):
@@ -107,8 +106,8 @@ def get(ctx, url_suffix) -> httpx.Response:
     return resp
 
 
-def start_check_run(ctx: GitContext) -> None:
-    body = {"name": ctx.check, "head_sha": ctx.sha, "status": "in_progress"}
+def start_check_run(ctx: GitContext, check_name: str) -> None:
+    body = {"name": check_name, "head_sha": ctx.sha, "status": "in_progress"}
     post(ctx, "check-runs", body)
 
 
@@ -116,12 +115,12 @@ def list_check_runs(ctx: GitContext) -> dict:
     return cast(dict, get(ctx, f"commits/{ctx.sha}/check-runs").json())["check_runs"]
 
 
-def check_run_id(ctx: GitContext) -> str:
-    return [r["id"] for r in list_check_runs(ctx) if r["name"] == ctx.check][0]
+def check_run_id(ctx: GitContext, check_name) -> str:
+    return [r["id"] for r in list_check_runs(ctx) if r["name"] == check_name][0]
 
 
-def annotate(ctx: GitContext, annotations: Annotations) -> None:
-    current_check = check_run_id(ctx)
+def annotate(ctx: GitContext, check_name: str, annotations: Annotations) -> None:
+    current_check = check_run_id(check_name)
     patch(
         ctx,
         f"check-runs/{current_check}",
@@ -141,7 +140,7 @@ def get_ctx() -> GitContext:
     token = os.getenv("TOKEN") or create_token()
     assert repo
     assert sha
-    return GitContext(repo, sha, token, "pylint")
+    return GitContext(repo, sha, token)
 
 
 def parse_mypy(mypy_path: Path) -> Annotations:
@@ -167,9 +166,9 @@ def main() -> None:
     if action == "list":
         pprint(list_check_runs(ctx))
     elif action == "start":
-        start_check_run(ctx)
+        start_check_run(ctx, sys.argv[2])
     elif action == "annotate-mypy":
-        annotate(ctx, parse_mypy(Path("mypy.output")))
+        annotate(ctx, "mypy", parse_mypy(Path("mypy.output")))
 
 
 if __name__ == "__main__":
