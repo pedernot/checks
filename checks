@@ -238,10 +238,6 @@ def parse_pylint(lines: Iterator[str]) -> Annotations:
     )
 
 
-def broken_func(foo: str) -> int:
-    return foo
-
-
 def get_lines(path: str) -> Iterator[str]:
     if path == "-":
         yield from sys.stdin
