@@ -143,6 +143,12 @@ def check_run_id(ctx: GitContext, check_name) -> str:
     return check_runs[0]
 
 
+def complete_check_run(ctx: GitContext, check_name: str, conclusion: str) -> None:
+    current_check = check_run_id(ctx, check_name)
+    body = {"status": "completed", "conclusion": conclusion}
+    patch(ctx, f"check-runs/{current_check}", body)
+
+
 def get_conclusion(annotations: Annotations) -> str:
     if any(a.level == AnnotationLevel.FAILURE for a in annotations.annotations):
         return "failure"

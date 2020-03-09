@@ -1,9 +1,17 @@
 import os
 from pathlib import Path
-from minimalci.tasks import Task
+from minimalci.tasks import Task, Status
 from minimalci.executors import Local, LocalContainer
 
-from checks import GitContext, start_check_run, create_token, annotate, parse_mypy, parse_pylint
+from checks import (
+    GitContext,
+    annotate,
+    complete_check_run,
+    create_token,
+    parse_mypy,
+    parse_pylint,
+    start_check_run,
+)
 
 SOURCE: Path
 IMAGE: str
@@ -56,5 +64,22 @@ class Mypy(Task):
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
-            output = exe.sh("make typecheck").decode().split("\n")
-            annotate(CTX, "mypy", parse_mypy(output))
+            output = exe.sh("make typecheck").decode()
+            print(output)
+            annotate(CTX, "mypy", parse_mypy(output.split("\n")))
+
+
+class Finally(Task):
+    run_after = [Pylint, Mypy]
+    run_always = True
+
+    def run(self) -> None:
+        with Local() as exe:
+            exe.unstash(SOURCE)
+            conclusion = (
+                "success"
+                if all(t.status == Status.success for t in self.state.tasks if t != self)
+                else "failure"
+            )
+            print(f"Setting github check conclusion {conclusion}")
+            complete_check_run(CTX, "ci", conclusion)
