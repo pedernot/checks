@@ -3,3 +3,4 @@ mypy
 black
 pylint
 httpx
+python-jose
