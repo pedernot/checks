@@ -2,6 +2,8 @@ from pathlib import Path
 from minimalci.tasks import Task
 from minimalci.executors import Local, LocalContainer
 
+import checks
+
 SOURCE: Path
 IMAGE: str
 
@@ -21,8 +23,9 @@ class Pylint(Task):
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
+            exe.unstash(self.state.secrets, "private_key.pem")
             exe.unstash(SOURCE)
-            print(exe.sh("make lint"))
+            exe.sh("make lint")
 
 
 class Mypy(Task):
