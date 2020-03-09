@@ -89,10 +89,10 @@ def machine_man_headers(jwt_token: str,) -> Dict[str, str]:
     return {"Authorization": f"Bearer {jwt_token}", "Accept": MACHINE_MAN_ACCEPT_HEADER}
 
 
-def create_token() -> str:
+def create_token(private_key: str) -> str:
     now = int(time.time()) - 5
     payload = {"iat": now, "exp": now + 600, "iss": APP_ID}
-    jwt_token = jwt.encode(payload, PRIVATE_KEY.read_text(), jwt.ALGORITHMS.RS256)
+    jwt_token = jwt.encode(payload, private_key, jwt.ALGORITHMS.RS256)
     resp = httpx.post(
         f"{GH_API}/app/installations/{INSTALLATION_ID}/access_tokens",
         headers=machine_man_headers(jwt_token),
@@ -173,7 +173,7 @@ def annotate(ctx: GitContext, check_name: str, annotations: Annotations) -> None
 def get_ctx() -> GitContext:
     repo = os.getenv("REPO")
     sha = os.getenv("SHA") or sp.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
-    token = os.getenv("TOKEN") or create_token()
+    token = os.getenv("TOKEN") or create_token(Path("private_key.pem").read_text())
     assert repo
     assert sha
     return GitContext(repo, sha, token)
