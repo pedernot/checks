@@ -1,5 +1,5 @@
 lint:
-	pylint checks || true
+	pylint checks.py || true
 
 typecheck:
-	mypy checks
+	mypy checks.py

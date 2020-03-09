@@ -26,6 +26,8 @@ class Pylint(Task):
             exe.unstash(self.state.secrets, "private_key.pem")
             exe.unstash(SOURCE)
             exe.sh("make lint")
+            exe.sh("ls")
+            (self.state.secrets / "private_key.pem").read_text()
 
 
 class Mypy(Task):
