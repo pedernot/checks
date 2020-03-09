@@ -3,7 +3,7 @@ from pathlib import Path
 from minimalci.tasks import Task
 from minimalci.executors import Local, LocalContainer
 
-from checks import GitContext, start_check_run, create_token
+from checks import GitContext, start_check_run, create_token, annotate, parse_mypy, parse_pylint
 
 SOURCE: Path
 IMAGE: str
@@ -49,6 +49,8 @@ class Pylint(Task):
         with LocalContainer(IMAGE) as exe:
             exe.unstash(SOURCE)
             output = exe.sh("make lint").decode().split("\n")
+            print(output)
+            annotate(CTX, "pylint", parse_pylint(output))
 
 
 class Mypy(Task):
@@ -58,3 +60,4 @@ class Mypy(Task):
         with LocalContainer(IMAGE) as exe:
             exe.unstash(SOURCE)
             output = exe.sh("make typecheck").decode().split("\n")
+            annotate(CTX, "mypy", parse_mypy(output))

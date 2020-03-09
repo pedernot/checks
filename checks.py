@@ -213,6 +213,7 @@ def extract_between(lsep: str, rsep: str, line: str) -> Tuple[str, str, str]:
 
 def parse_pylint_line(line: str) -> Optional[Annotation]:
     loc, rest = parse_loc(line)
+    print(loc, rest)
     if not loc:
         return None
     _, error_spec, msg = extract_between("[", "]", rest)
