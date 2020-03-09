@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from pprint import pprint
-from typing import Dict, cast, List
+from typing import Dict, cast, List, Optional, Tuple, Iterator
 import os
 import sys
 import time
@@ -30,6 +30,12 @@ class AnnotationLevel(Enum):
         if level == "error":
             return cls.FAILURE
         assert False
+
+
+@dataclass
+class Loc:
+    path: str
+    line_no: int
 
 
 @dataclass
@@ -120,7 +126,8 @@ def check_run_id(ctx: GitContext, check_name) -> str:
 
 
 def annotate(ctx: GitContext, check_name: str, annotations: Annotations) -> None:
-    current_check = check_run_id(check_name)
+    return
+    current_check = check_run_id(ctx, check_name)
     patch(
         ctx,
         f"check-runs/{current_check}",
@@ -143,21 +150,45 @@ def get_ctx() -> GitContext:
     return GitContext(repo, sha, token)
 
 
-def parse_mypy(mypy_path: Path) -> Annotations:
+def parse_loc(line: str) -> Tuple[Optional[Loc], str]:
+    loc, _, rest = line.partition(": ")
+    if not loc:
+        return None, line
+    path, _, line_no = loc.partition(":")
+    if not path or not line_no:
+        return None, line
+    if not line_no.isdigit():
+        return None, line
+    return Loc(path, int(line_no)), rest
+
+
+def parse_mypy(lines: Iterator[str]) -> Annotations:
     errors = []
-    for line in mypy_path.read_text().split("\n"):
-        if ":" not in line:
-            # Assume not an error line
+    for line in lines:
+        loc, rest = parse_loc(line)
+        if not loc:
             continue
-        loc, _, rest = line.partition(": ")
         level, _, msg = rest.partition(": ")
-        path, _, line_no = loc.partition(":")
-        errors.append(Annotation(path, int(line_no), AnnotationLevel.from_mypy_level(level), msg))
+        print(loc, level, msg)
+        errors.append(
+            Annotation(loc.path, loc.line_no, AnnotationLevel.from_mypy_level(level), msg)
+        )
     return Annotations("Mypy", "Result of mypy checks", errors)
+
+
+def parse_pylint(lines: Iterator[str]) -> Annotations:
+    pass
 
 
 def broken_func(foo: str) -> int:
     return foo
+
+
+def get_lines(path: str) -> Iterator[str]:
+    if path == "-":
+        yield from sys.stdin
+    else:
+        yield from Path(path).read_text().split("\n")
 
 
 def main() -> None:
@@ -168,7 +199,9 @@ def main() -> None:
     elif action == "start":
         start_check_run(ctx, sys.argv[2])
     elif action == "annotate-mypy":
-        annotate(ctx, "mypy", parse_mypy(Path("mypy.output")))
+        annotate(ctx, "mypy", parse_mypy(get_lines(sys.argv[2])))
+    elif action == "annotate-pylint":
+        annotate(ctx, "pylint", parse_pylint(get_lines(sys.argv[2])))
 
 
 if __name__ == "__main__":
