@@ -10,6 +10,13 @@ IMAGE: str
 CTX: GitContext
 
 
+def get_checks_ctx(commit: str) -> GitContext:
+    private_key = Path("private_key.pem").read_text()
+    _, _, repo = os.environ["REPO_URL"].partition(":")
+    repo, _, _ = repo.partition(".")
+    return GitContext(repo, commit, create_token(private_key))
+
+
 class Setup(Task):
     def run(self) -> None:
         with Local() as exe:
@@ -18,19 +25,25 @@ class Setup(Task):
             global CTX
             SOURCE = exe.stash("*")
             IMAGE = f"test:{self.state.commit}"
-            exe.sh(f"docker build . -t {IMAGE}")
             exe.unstash(self.state.secrets, "private_key.pem")
-            private_key = Path("private_key.pem").read_text()
-            _, _, repo = os.environ["REPO_URL"].partition(":")
-            CTX = GitContext(repo, self.state.commit, create_token(private_key))
+            CTX = get_checks_ctx(self.state.commit)
             start_check_run(CTX, "pylint")
             start_check_run(CTX, "mypy")
             start_check_run(CTX, "ci")
             print(CTX.repo)
 
 
-class Pylint(Task):
+class Build(Task):
     run_after = [Setup]
+
+    def run(self) -> None:
+        with Local() as exe:
+            exe.unstash(SOURCE)
+            exe.sh(f"docker build . -t {IMAGE}")
+
+
+class Pylint(Task):
+    run_after = [Build]
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
@@ -39,7 +52,7 @@ class Pylint(Task):
 
 
 class Mypy(Task):
-    run_after = [Setup]
+    run_after = [Build]
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
