@@ -14,3 +14,21 @@ class Setup(Task):
             SOURCE = exe.stash("*")
             IMAGE = f"test:{self.state.commit}"
             exe.sh(f"docker build . -t {IMAGE}")
+
+
+class Pylint(Task):
+    run_after = [Setup]
+
+    def run(self) -> None:
+        with LocalContainer(IMAGE) as exe:
+            exe.unstash(SOURCE)
+            print(exe.sh("make lint"))
+
+
+class Mypy(Task):
+    run_after = [Setup]
+
+    def run(self) -> None:
+        with LocalContainer(IMAGE) as exe:
+            exe.unstash(SOURCE)
+            exe.sh("make typecheck")
