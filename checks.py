@@ -40,16 +40,15 @@ class Loc:
 
 @dataclass
 class Annotation:
-    path: str
-    line_no: int
+    loc: Loc
     level: AnnotationLevel
     msg: str
 
     def asdict(self) -> dict:
         return {
-            "path": self.path,
-            "start_line": self.line_no,
-            "end_line": self.line_no,
+            "path": self.loc.path,
+            "start_line": self.loc.line_no,
+            "end_line": self.loc.line_no,
             "annotation_level": self.level.value,
             "message": self.msg,
         }
@@ -170,9 +169,7 @@ def parse_mypy(lines: Iterator[str]) -> Annotations:
             continue
         level, _, msg = rest.partition(": ")
         print(loc, level, msg)
-        errors.append(
-            Annotation(loc.path, loc.line_no, AnnotationLevel.from_mypy_level(level), msg)
-        )
+        errors.append(Annotation(loc, AnnotationLevel.from_mypy_level(level), msg))
     return Annotations("Mypy", "Result of mypy checks", errors)
 
 
