@@ -6,6 +6,7 @@ import checks
 
 SOURCE: Path
 IMAGE: str
+CHECKS_KEY: str
 
 
 class Setup(Task):
@@ -13,9 +14,12 @@ class Setup(Task):
         with Local() as exe:
             global SOURCE
             global IMAGE
+            global CHECKS_KEY
             SOURCE = exe.stash("*")
             IMAGE = f"test:{self.state.commit}"
             exe.sh(f"docker build . -t {IMAGE}")
+            exe.unstash(self.state.secrets, "private_key.pem")
+            CHECKS_KEY = Path("private_key.pem").read_text()
 
 
 class Pylint(Task):
@@ -23,11 +27,8 @@ class Pylint(Task):
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
-            exe.unstash(self.state.secrets, "private_key.pem")
             exe.unstash(SOURCE)
             exe.sh("make lint")
-            exe.sh("ls")
-            (self.state.secrets / "private_key.pem").read_text()
 
 
 class Mypy(Task):
