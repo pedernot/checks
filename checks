@@ -5,6 +5,7 @@ from enum import Enum
 from pathlib import Path
 from pprint import pprint
 from typing import Dict, cast, List, Optional, Tuple, Iterator, TypeVar, Callable
+import subprocess as sp
 import os
 import sys
 import time
@@ -34,6 +35,16 @@ class AnnotationLevel(Enum):
             return cls.FAILURE
         assert False
 
+    @classmethod
+    def from_pylint_level(cls, level: str) -> AnnotationLevel:
+        if level in ["E", "F"]:
+            return cls.FAILURE
+        if level == "W":
+            return cls.WARNING
+        if level in ["R", "C"]:
+            return cls.NOTICE
+        assert False
+
 
 @dataclass
 class Loc:
@@ -46,6 +57,7 @@ class Annotation:
     loc: Loc
     level: AnnotationLevel
     msg: str
+    title: str = ""
 
     def asdict(self) -> dict:
         return {
@@ -54,6 +66,7 @@ class Annotation:
             "end_line": self.loc.line_no,
             "annotation_level": self.level.value,
             "message": self.msg,
+            "title": self.title,
         }
 
 
@@ -147,7 +160,7 @@ def annotate(ctx: GitContext, check_name: str, annotations: Annotations) -> None
 
 def get_ctx() -> GitContext:
     repo = os.getenv("REPO")
-    sha = os.getenv("SHA")
+    sha = os.getenv("SHA") or sp.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
     token = os.getenv("TOKEN") or create_token()
     assert repo
     assert sha
@@ -180,13 +193,21 @@ def parse_mypy_line(line: str) -> Optional[Annotation]:
     return Annotation(loc, AnnotationLevel.from_mypy_level(level), msg)
 
 
+def extract_between(lsep: str, rsep: str, line: str) -> Tuple[str, str, str]:
+    before, _, stripped = line.partition(lsep)
+    extracted, _, after = stripped.rpartition(rsep)
+    return before, extracted, after
+
+
 def parse_pylint_line(line: str) -> Optional[Annotation]:
     loc, rest = parse_loc(line)
-    print(loc, rest)
     if not loc:
         return None
-    level, _, msg = rest.partition(": ")
-    return Annotation(loc, AnnotationLevel.from_mypy_level(level), msg)
+    _, error_spec, msg = extract_between("[", "]", rest)
+    error_code, error_name, _ = extract_between("(", ")", error_spec)
+    return Annotation(
+        loc, AnnotationLevel.from_pylint_level(error_code[0]), msg.strip(), error_name
+    )
 
 
 def parse_annotations(
