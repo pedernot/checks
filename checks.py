@@ -4,13 +4,16 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from pprint import pprint
-from typing import Dict, cast, List, Optional, Tuple, Iterator
+from typing import Dict, cast, List, Optional, Tuple, Iterator, TypeVar, Callable
 import os
 import sys
 import time
 
 from jose import jwt  # type: ignore
 import httpx
+
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -111,9 +114,9 @@ def get(ctx, url_suffix) -> httpx.Response:
     return resp
 
 
-def start_check_run(ctx: GitContext, check_name: str) -> None:
+def start_check_run(ctx: GitContext, check_name: str) -> str:
     body = {"name": check_name, "head_sha": ctx.sha, "status": "in_progress"}
-    post(ctx, "check-runs", body)
+    return cast(dict, post(ctx, "check-runs", body).json())["id"]
 
 
 def list_check_runs(ctx: GitContext) -> dict:
@@ -121,11 +124,13 @@ def list_check_runs(ctx: GitContext) -> dict:
 
 
 def check_run_id(ctx: GitContext, check_name) -> str:
-    return [r["id"] for r in list_check_runs(ctx) if r["name"] == check_name][0]
+    check_runs = [r["id"] for r in list_check_runs(ctx) if r["name"] == check_name]
+    if not check_runs:
+        return start_check_run(ctx, check_name)
+    return check_runs[0]
 
 
 def annotate(ctx: GitContext, check_name: str, annotations: Annotations) -> None:
-    return
     current_check = check_run_id(ctx, check_name)
     patch(
         ctx,
@@ -161,20 +166,43 @@ def parse_loc(line: str) -> Tuple[Optional[Loc], str]:
     return Loc(path, int(line_no)), rest
 
 
+def skip_nones(items: Iterator[Optional[T]]) -> Iterator[T]:
+    for item in items:
+        if item is not None:
+            yield item
+
+
+def parse_mypy_line(line: str) -> Optional[Annotation]:
+    loc, rest = parse_loc(line)
+    if not loc:
+        return None
+    level, _, msg = rest.partition(": ")
+    return Annotation(loc, AnnotationLevel.from_mypy_level(level), msg)
+
+
+def parse_pylint_line(line: str) -> Optional[Annotation]:
+    loc, rest = parse_loc(line)
+    print(loc, rest)
+    if not loc:
+        return None
+    level, _, msg = rest.partition(": ")
+    return Annotation(loc, AnnotationLevel.from_mypy_level(level), msg)
+
+
+def parse_annotations(
+    parser: Callable[[str], Optional[Annotation]], lines: Iterator[str]
+) -> List[Annotation]:
+    return list(skip_nones(map(parser, lines)))
+
+
 def parse_mypy(lines: Iterator[str]) -> Annotations:
-    errors = []
-    for line in lines:
-        loc, rest = parse_loc(line)
-        if not loc:
-            continue
-        level, _, msg = rest.partition(": ")
-        print(loc, level, msg)
-        errors.append(Annotation(loc, AnnotationLevel.from_mypy_level(level), msg))
-    return Annotations("Mypy", "Result of mypy checks", errors)
+    return Annotations("Mypy", "Result of mypy checks", parse_annotations(parse_mypy_line, lines))
 
 
 def parse_pylint(lines: Iterator[str]) -> Annotations:
-    pass
+    return Annotations(
+        "Pylint", "Result of pylint checks", parse_annotations(parse_pylint_line, lines)
+    )
 
 
 def broken_func(foo: str) -> int:
