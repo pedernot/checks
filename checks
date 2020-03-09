@@ -143,17 +143,29 @@ def check_run_id(ctx: GitContext, check_name) -> str:
     return check_runs[0]
 
 
+def get_conclusion(annotations: Annotations) -> str:
+    if any(a.level == AnnotationLevel.FAILURE for a in annotations.annotations):
+        return "failure"
+    if any(a.level == AnnotationLevel.WARNING for a in annotations.annotations):
+        return "failure"
+    if any(a.level == AnnotationLevel.NOTICE for a in annotations.annotations):
+        return "neutral"
+    return "success"
+
+
 def annotate(ctx: GitContext, check_name: str, annotations: Annotations) -> None:
     current_check = check_run_id(ctx, check_name)
     patch(
         ctx,
         f"check-runs/{current_check}",
         {
+            "status": "completed",
+            "conclusion": get_conclusion(annotations),
             "output": {
                 "title": annotations.title,
                 "summary": annotations.summary,
                 "annotations": [a.asdict() for a in annotations.annotations],
-            }
+            },
         },
     )
 
