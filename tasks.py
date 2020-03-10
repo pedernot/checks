@@ -1,7 +1,8 @@
 import os
+from typing import Iterator, Tuple
 from pathlib import Path
 from minimalci.tasks import Task, Status  # type: ignore
-from minimalci.executors import Local, LocalContainer, NonZeroExit  # type: ignore
+from minimalci.executors import Executor, Local, LocalContainer, NonZeroExit  # type: ignore
 
 from checks import (
     GitContext,
@@ -16,6 +17,16 @@ from checks import (
 SOURCE: Path
 IMAGE: str
 CTX: GitContext
+
+
+def run_and_capture_lines(exe: Executor, cmd: str) -> Tuple[Iterator[str], bool]:
+    failed = False
+    try:
+        raw_output = exe.sh(cmd)
+    except NonZeroExit as ex:
+        raw_output = ex.stdout
+        failed = True
+    return raw_output.decode().split("\r\n"), failed
 
 
 def get_checks_ctx(commit: str) -> GitContext:
@@ -55,11 +66,8 @@ class Pylint(Task):
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
-            try:
-                raw_output = exe.sh("make lint")
-            except NonZeroExit as ex:
-                raw_output = ex.stdout
-            annotate(CTX, "pylint", parse_pylint(raw_output.decode().split("\r\n")))
+            lines, _ = run_and_capture_lines(exe, "make lint")
+            annotate(CTX, "pylint", parse_pylint(lines))
 
 
 class Mypy(Task):
@@ -67,13 +75,8 @@ class Mypy(Task):
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
-            failed = False
-            try:
-                raw_output = exe.sh("make typecheck")
-            except NonZeroExit as ex:
-                raw_output = ex.stdout
-                failed = True
-            annotate(CTX, "mypy", parse_mypy(raw_output.decode().split("\r\n")))
+            lines, failed = run_and_capture_lines(exe, "make typecheck")
+            annotate(CTX, "mypy", parse_mypy(lines))
             assert not failed
 
 
