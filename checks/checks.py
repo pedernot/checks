@@ -127,8 +127,10 @@ def get(ctx, url_suffix) -> httpx.Response:
     return resp
 
 
-def start(ctx: Config, check_name: str) -> str:
+def start(ctx: Config, check_name: str, details_url: Optional[str] = None) -> str:
     body = {"name": check_name, "head_sha": ctx.sha, "status": "in_progress"}
+    if details_url:
+        body["details_url"] = details_url
     return cast(dict, post(ctx, "check-runs", body).json())["id"]
 
 

@@ -39,9 +39,9 @@ class Setup(Task):
             IMAGE = f"test:{self.state.commit}"
             exe.unstash(self.state.secrets, "private_key.pem")
             CTX = get_checks_ctx(self.state.commit)
-            checks.start(CTX, "pylint")
-            checks.start(CTX, "mypy")
-            checks.start(CTX, "ci")
+            checks.start(CTX, "ci", details_url=self.state.log_url)
+            checks.start(CTX, "pylint", details_url=f"{self.state.log_url}/#Pylint")
+            checks.start(CTX, "mypy", details_url=f"{self.state.log_url}/#Mypy")
 
 
 class Build(Task):
