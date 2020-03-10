@@ -17,6 +17,12 @@ import httpx
 T = TypeVar("T")
 
 
+def bad_func(var: int) -> str:
+    c = 1
+    print(c)
+    return var
+
+
 @dataclass
 class Config:
     repo: str
