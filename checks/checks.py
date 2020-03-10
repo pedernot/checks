@@ -18,7 +18,7 @@ T = TypeVar("T")
 
 
 @dataclass
-class GitContext:
+class Config:
     repo: str
     sha: str
     token: str
@@ -105,7 +105,7 @@ def headers(token: str) -> Dict[str, str]:
     return {"Authorization": f"token {token}", "Accept": PREVIEW_ACCEPT_HEADER}
 
 
-def url(ctx: GitContext, suffix: str) -> str:
+def url(ctx: Config, suffix: str) -> str:
     return f"{GH_API}/repos/{ctx.repo}/{suffix}"
 
 
@@ -127,40 +127,40 @@ def get(ctx, url_suffix) -> httpx.Response:
     return resp
 
 
-def start_check_run(ctx: GitContext, check_name: str) -> str:
+def start(ctx: Config, check_name: str) -> str:
     body = {"name": check_name, "head_sha": ctx.sha, "status": "in_progress"}
     return cast(dict, post(ctx, "check-runs", body).json())["id"]
 
 
-def list_check_runs(ctx: GitContext) -> dict:
+def list_check_runs(ctx: Config) -> dict:
     return cast(dict, get(ctx, f"commits/{ctx.sha}/check-runs").json())["check_runs"]
 
 
-def check_run_id(ctx: GitContext, check_name) -> str:
+def check_run_id(ctx: Config, check_name) -> str:
     check_runs = [r["id"] for r in list_check_runs(ctx) if r["name"] == check_name]
     if not check_runs:
-        return start_check_run(ctx, check_name)
+        return start(ctx, check_name)
     return check_runs[0]
 
 
-def complete_check_run(ctx: GitContext, check_name: str, conclusion: str) -> None:
+def conclude(
+    ctx: Config,
+    check_name: str,
+    conclusion: Optional[str] = None,
+    from_lines: Optional[Iterator[str]] = None,
+) -> None:
     current_check = check_run_id(ctx, check_name)
     body = {"status": "completed", "conclusion": conclusion}
-    patch(ctx, f"check-runs/{current_check}", body)
-
-
-def get_conclusion(annotations: Annotations) -> str:
-    if any(a.level == AnnotationLevel.FAILURE for a in annotations.annotations):
-        return "failure"
-    if any(a.level == AnnotationLevel.WARNING for a in annotations.annotations):
-        return "failure"
-    if any(a.level == AnnotationLevel.NOTICE for a in annotations.annotations):
-        return "neutral"
-    return "success"
-
-
-def annotate(ctx: GitContext, check_name: str, annotations: Annotations) -> None:
-    current_check = check_run_id(ctx, check_name)
+    if conclusion is not None:
+        patch(ctx, f"check-runs/{current_check}", body)
+        return
+    assert from_lines is not None
+    if check_name == "pylint":
+        annotations = parse_pylint(from_lines)
+    elif check_name == "mypy":
+        annotations = parse_mypy(from_lines)
+    else:
+        assert False
     patch(
         ctx,
         f"check-runs/{current_check}",
@@ -176,13 +176,23 @@ def annotate(ctx: GitContext, check_name: str, annotations: Annotations) -> None
     )
 
 
-def get_ctx() -> GitContext:
+def get_conclusion(annotations: Annotations) -> str:
+    if any(a.level == AnnotationLevel.FAILURE for a in annotations.annotations):
+        return "failure"
+    if any(a.level == AnnotationLevel.WARNING for a in annotations.annotations):
+        return "failure"
+    if any(a.level == AnnotationLevel.NOTICE for a in annotations.annotations):
+        return "neutral"
+    return "success"
+
+
+def get_ctx() -> Config:
     repo = os.getenv("REPO")
     sha = os.getenv("SHA") or sp.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
     token = os.getenv("TOKEN") or create_token(Path("private_key.pem").read_text())
     assert repo
     assert sha
-    return GitContext(repo, sha, token)
+    return Config(repo, sha, token)
 
 
 def parse_loc(line: str) -> Tuple[Optional[Loc], str]:
@@ -257,11 +267,7 @@ def main() -> None:
     if action == "list":
         pprint(list_check_runs(ctx))
     elif action == "start":
-        start_check_run(ctx, sys.argv[2])
-    elif action == "annotate-mypy":
-        annotate(ctx, "mypy", parse_mypy(get_lines(sys.argv[2])))
-    elif action == "annotate-pylint":
-        annotate(ctx, "pylint", parse_pylint(get_lines(sys.argv[2])))
+        start(ctx, sys.argv[2])
 
 
 if __name__ == "__main__":

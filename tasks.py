@@ -4,19 +4,11 @@ from pathlib import Path
 from minimalci.tasks import Task, Status  # type: ignore
 from minimalci.executors import Executor, Local, LocalContainer, NonZeroExit  # type: ignore
 
-from checks import (
-    GitContext,
-    annotate,
-    complete_check_run,
-    create_token,
-    parse_mypy,
-    parse_pylint,
-    start_check_run,
-)
+import checks
 
 SOURCE: Path
 IMAGE: str
-CTX: GitContext
+CTX: checks.Config
 
 
 def run_and_capture_lines(exe: Executor, cmd: str) -> Tuple[Iterator[str], bool]:
@@ -29,11 +21,12 @@ def run_and_capture_lines(exe: Executor, cmd: str) -> Tuple[Iterator[str], bool]
     return raw_output.decode().split("\r\n"), failed
 
 
-def get_checks_ctx(commit: str) -> GitContext:
+def get_checks_ctx(commit: str) -> checks.Config:
     private_key = Path("private_key.pem").read_text()
     _, _, repo = os.environ["REPO_URL"].partition(":")
     repo, _, _ = repo.partition(".")
-    return GitContext(repo, commit, create_token(private_key))
+    token = checks.create_token(private_key)
+    return checks.Config(repo, commit, token)
 
 
 class Setup(Task):
@@ -46,10 +39,9 @@ class Setup(Task):
             IMAGE = f"test:{self.state.commit}"
             exe.unstash(self.state.secrets, "private_key.pem")
             CTX = get_checks_ctx(self.state.commit)
-            start_check_run(CTX, "pylint")
-            start_check_run(CTX, "mypy")
-            start_check_run(CTX, "ci")
-            print(CTX.repo)
+            checks.start(CTX, "pylint")
+            checks.start(CTX, "mypy")
+            checks.start(CTX, "ci")
 
 
 class Build(Task):
@@ -67,7 +59,7 @@ class Pylint(Task):
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
             lines, _ = run_and_capture_lines(exe, "make lint")
-            annotate(CTX, "pylint", parse_pylint(lines))
+            checks.conclude(CTX, "pylint", from_lines=lines)
 
 
 class Mypy(Task):
@@ -76,7 +68,7 @@ class Mypy(Task):
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
             lines, failed = run_and_capture_lines(exe, "make typecheck")
-            annotate(CTX, "mypy", parse_mypy(lines))
+            checks.conclude(CTX, "mypy", from_lines=lines)
             assert not failed
 
 
@@ -87,10 +79,9 @@ class Finally(Task):
     def run(self) -> None:
         with Local() as exe:
             exe.unstash(SOURCE)
-            conclusion = (
-                "success"
-                if all(t.status == Status.success for t in self.state.tasks if t != self)
-                else "failure"
-            )
+            if all(t.status == Status.success for t in self.state.tasks if t != self):
+                conclusion = "success"
+            else:
+                conclusion = "failure"
             print(f"Setting github check conclusion {conclusion}")
-            complete_check_run(CTX, "ci", conclusion)
+            checks.conclude(CTX, "ci", conclusion)
