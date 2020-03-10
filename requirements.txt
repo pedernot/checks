@@ -4,3 +4,4 @@ black
 pylint
 httpx
 python-jose
+git+https://github.com/oysols/minimalci@662afa66bc1805baf4406e7a83fe6f58769cb6b9

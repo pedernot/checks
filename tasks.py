@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
-from minimalci.tasks import Task, Status
-from minimalci.executors import Local, LocalContainer
+from minimalci.tasks import Task, Status  # type: ignore
+from minimalci.executors import Local, LocalContainer  # type: ignore
 
 from checks import (
     GitContext,
@@ -55,8 +55,8 @@ class Pylint(Task):
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
-            output = exe.sh("make lint").decode().split("\n")
-            annotate(CTX, "pylint", parse_pylint(output))
+            output = exe.sh("make lint").decode()
+            annotate(CTX, "pylint", parse_pylint(output.split("\n")))
 
 
 class Mypy(Task):
@@ -65,7 +65,6 @@ class Mypy(Task):
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
             output = exe.sh("make typecheck").decode()
-            print(output)
             annotate(CTX, "mypy", parse_mypy(output.split("\n")))
 
 
