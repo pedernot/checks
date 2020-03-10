@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from minimalci.tasks import Task, Status  # type: ignore
-from minimalci.executors import Local, LocalContainer  # type: ignore
+from minimalci.executors import Local, LocalContainer, NonZeroExit  # type: ignore
 
 from checks import (
     GitContext,
@@ -56,7 +56,7 @@ class Pylint(Task):
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
             output = exe.sh("make lint").decode()
-            annotate(CTX, "pylint", parse_pylint(output.split("\n")))
+            annotate(CTX, "pylint", parse_pylint(output.split("\r\n")))
 
 
 class Mypy(Task):
@@ -64,8 +64,15 @@ class Mypy(Task):
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
-            output = exe.sh("make typecheck").decode()
-            annotate(CTX, "mypy", parse_mypy(output.split("\n")))
+            failed = False
+            try:
+                raw_output = exe.sh("make typecheck")
+            except NonZeroExit as ex:
+                raw_output = ex.stdout
+                failed = True
+            print(raw_output.decode().split("\r\n"))
+            annotate(CTX, "mypy", parse_mypy(raw_output.decode().split("\r\n")))
+            assert not failed
 
 
 class Finally(Task):
