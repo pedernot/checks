@@ -1,5 +1,5 @@
 lint:
-	pylint checks.py --rcfile=setup.cfg
+	@pylint checks --rcfile=setup.cfg
 
 typecheck:
-	mypy checks.py --no-color-output
+	@mypy checks --no-color-output
