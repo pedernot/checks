@@ -6,9 +6,9 @@ from minimalci.executors import Executor, Local, LocalContainer, NonZeroExit  # 
 
 import checks
 
-SOURCE: Path
-IMAGE: str
-CTX: checks.Config
+# Checks stuff
+APP_ID = "56533"
+INSTALLATION_ID = "7163640"
 
 
 def run_and_capture_lines(exe: Executor, cmd: str) -> Tuple[Iterator[str], bool]:
@@ -25,23 +25,20 @@ def get_checks_ctx(commit: str) -> checks.Config:
     private_key = Path("private_key.pem").read_text()
     _, _, repo = os.environ["REPO_URL"].partition(":")
     repo, _, _ = repo.partition(".")
-    token = checks.create_token(private_key)
+    token = checks.create_token(private_key, APP_ID, INSTALLATION_ID)
     return checks.Config(repo, commit, token)
 
 
 class Setup(Task):
     def run(self) -> None:
         with Local() as exe:
-            global SOURCE
-            global IMAGE
-            global CTX
-            SOURCE = exe.stash("*")
-            IMAGE = f"test:{self.state.commit}"
+            self.state.source = exe.stash("*")
+            self.state.image = f"test:{self.state.commit}"
             exe.unstash(self.state.secrets, "private_key.pem")
-            CTX = get_checks_ctx(self.state.commit)
-            checks.start(CTX, "ci", details_url=self.state.log_url)
-            checks.start(CTX, "pylint", details_url=f"{self.state.log_url}/#Pylint")
-            checks.start(CTX, "mypy", details_url=f"{self.state.log_url}/#Mypy")
+            self.state.ctx = get_checks_ctx(self.state.commit)
+            checks.start(self.state.ctx, "ci", details_url=self.state.log_url)
+            checks.start(self.state.ctx, "pylint", details_url=f"{self.state.log_url}/#Pylint")
+            checks.start(self.state.ctx, "mypy", details_url=f"{self.state.log_url}/#Mypy")
 
 
 class Build(Task):
@@ -49,26 +46,26 @@ class Build(Task):
 
     def run(self) -> None:
         with Local() as exe:
-            exe.unstash(SOURCE)
-            exe.sh(f"docker build . -t {IMAGE}")
+            exe.unstash(self.state.source)
+            exe.sh(f"docker build . -t {self.state.image}")
 
 
 class Pylint(Task):
     run_after = [Build]
 
     def run(self) -> None:
-        with LocalContainer(IMAGE) as exe:
+        with LocalContainer(self.state.image) as exe:
             lines, _ = run_and_capture_lines(exe, "make lint")
-            checks.conclude(CTX, "pylint", from_lines=lines)
+            checks.conclude(self.state.ctx, "pylint", from_lines=lines)
 
 
 class Mypy(Task):
     run_after = [Build]
 
     def run(self) -> None:
-        with LocalContainer(IMAGE) as exe:
+        with LocalContainer(self.state.image) as exe:
             lines, failed = run_and_capture_lines(exe, "make typecheck")
-            checks.conclude(CTX, "mypy", from_lines=lines)
+            checks.conclude(self.state.ctx, "mypy", from_lines=lines)
             assert not failed
 
 
@@ -78,10 +75,10 @@ class Finally(Task):
 
     def run(self) -> None:
         with Local() as exe:
-            exe.unstash(SOURCE)
+            exe.unstash(self.state.source)
             if all(t.status == Status.success for t in self.state.tasks if t != self):
                 conclusion = "success"
             else:
                 conclusion = "failure"
             print(f"Setting github check conclusion {conclusion}")
-            checks.conclude(CTX, "ci", conclusion)
+            checks.conclude(self.state.ctx, "ci", conclusion)

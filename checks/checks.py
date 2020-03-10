@@ -79,9 +79,6 @@ class Annotations:
 
 MACHINE_MAN_ACCEPT_HEADER = "application/vnd.github.machine-man-preview+json"
 PREVIEW_ACCEPT_HEADER = "application/vnd.github.antiope-preview+json"
-PRIVATE_KEY = Path("private_key.pem")
-APP_ID = "56533"
-INSTALLATION_ID = "7163640"
 GH_API = "https://api.github.com"
 
 
@@ -89,12 +86,12 @@ def machine_man_headers(jwt_token: str,) -> Dict[str, str]:
     return {"Authorization": f"Bearer {jwt_token}", "Accept": MACHINE_MAN_ACCEPT_HEADER}
 
 
-def create_token(private_key: str) -> str:
+def create_token(private_key: str, app_id: str, installation_id: str) -> str:
     now = int(time.time()) - 5
-    payload = {"iat": now, "exp": now + 600, "iss": APP_ID}
+    payload = {"iat": now, "exp": now + 600, "iss": app_id}
     jwt_token = jwt.encode(payload, private_key, jwt.ALGORITHMS.RS256)
     resp = httpx.post(
-        f"{GH_API}/app/installations/{INSTALLATION_ID}/access_tokens",
+        f"{GH_API}/app/installations/{installation_id}/access_tokens",
         headers=machine_man_headers(jwt_token),
     )
     resp.raise_for_status()
@@ -191,7 +188,11 @@ def get_conclusion(annotations: Annotations) -> str:
 def get_ctx() -> Config:
     repo = os.getenv("REPO")
     sha = os.getenv("SHA") or sp.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
-    token = os.getenv("TOKEN") or create_token(Path("private_key.pem").read_text())
+    app_id = "56533"
+    installation_id = "7163640"
+    token = os.getenv("TOKEN") or create_token(
+        Path("private_key.pem").read_text(), app_id, installation_id
+    )
     assert repo
     assert sha
     return Config(repo, sha, token)
