@@ -55,8 +55,11 @@ class Pylint(Task):
 
     def run(self) -> None:
         with LocalContainer(IMAGE) as exe:
-            output = exe.sh("make lint").decode()
-            annotate(CTX, "pylint", parse_pylint(output.split("\r\n")))
+            try:
+                raw_output = exe.sh("make lint")
+            except NonZeroExit as ex:
+                raw_output = ex.stdout
+            annotate(CTX, "pylint", parse_pylint(raw_output.decode().split("\r\n")))
 
 
 class Mypy(Task):
@@ -70,7 +73,6 @@ class Mypy(Task):
             except NonZeroExit as ex:
                 raw_output = ex.stdout
                 failed = True
-            print(raw_output.decode().split("\r\n"))
             annotate(CTX, "mypy", parse_mypy(raw_output.decode().split("\r\n")))
             assert not failed
 
