@@ -29,6 +29,8 @@ class AnnotationLevel(Enum):
     WARNING = "warning"
     NOTICE = "notice"
 
+    # pylint: disable=inconsistent-return-statements
+
     @classmethod
     def from_mypy_level(cls, level: str) -> AnnotationLevel:
         if level == "error":
